@@ -1,0 +1,24 @@
+{
+  "name": "chat-bot-shortcut",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "gcf": "bash deployGCF.sh",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hanlin-edu-tech/chat-bot-shortcut.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/hanlin-edu-tech/chat-bot-shortcut/issues"
+  },
+  "homepage": "https://github.com/hanlin-edu-tech/chat-bot-shortcut#readme"
+}
