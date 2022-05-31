@@ -1,0 +1,23 @@
+name: Deploy Function
+
+on:
+  push:
+    tags:
+        - ^\d+\.\d+\.\d+$
+
+jobs:
+  deploy-function:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: auth
+        uses: google-github-actions/auth@v0
+        with:
+          credentials_json: '${{ secrets.KEY_FILE }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v0
+
+      - name: Deploy to GCF
+        run: bash deployGCF.sh
