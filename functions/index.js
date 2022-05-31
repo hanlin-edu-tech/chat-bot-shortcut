@@ -1,4 +1,6 @@
-exports.convertToShortcut = (req, res) => {
+const publishStory = require('./shortcutAPI')
+
+exports.convertToShortcut = async (req, res) => {
     if (req.method === 'GET' || !req.body.message) {
         return res.status(403).json({
             status: 'error',
@@ -6,7 +8,6 @@ exports.convertToShortcut = (req, res) => {
         })
     }
 
-    const message = req.body.message
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     let body = {}
 
@@ -24,13 +25,29 @@ exports.convertToShortcut = (req, res) => {
                     isValid = false
                 }
             }
-            console.log(formInputs)
 
             if (!isValid) {
                 body = createBugReportCard(formInputs)
                 break
             }
-            body = createSubmittedCard()
+
+            try {
+                const senderEmail = req.body.message.sender.email
+                formInputs.description = `Sender Email: ${senderEmail}\n\n${formInputs.description}`
+
+                const { title, product, category, description } = formInputs
+                const res = await publishStory(`[${product}][${category}][${title}]`, description)
+
+                if (res.status !== 201) {
+                    body = createBugReportCard(formInputs, true)
+                    break
+                }
+                body = createSubmittedCard()
+            } catch (err) {
+                body = createBugReportCard(formInputs, true)
+                console.log(err)
+            }
+
             break
         default:
             return
@@ -70,7 +87,18 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '' }) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '' }, isError = false) {
+    const error = {
+        decoratedText: {
+            topLabel: '',
+            text: '回報過程發生問題，請稍後再試。',
+            startIcon: {
+                knownIcon: 'STAR',
+                altText: 'report submitting error'
+            }
+        }
+    }
+
     const hint = {
         decoratedText: {
             topLabel: '',
@@ -117,12 +145,16 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
         }
     ]
 
+    const widgets = []
+    if (isError) {
+        widgets.push(error, hint, ...inputs)
+    } else {
+        widgets.push(hint, ...inputs)
+    }
+
     return {
         sections: [{
-            widgets: [
-                hint,
-                ...inputs
-            ]
+            widgets
         }],
         fixedFooter: {
             primaryButton: {
