@@ -35,13 +35,11 @@ exports.convertToShortcut = async (req, res) => {
             }
 
             try {
-                const senderEmail = req.body.message.sender.email
-                formInputs.description = `Sender Email: ${senderEmail}\n\n${formInputs.description}`
-
                 const { title, product, category, description } = formInputs
-                const res = await publishStory(`[${product}][${category}][${title}]`, description)
+                const senderEmail = req.body.message.sender.email
+                const resSubmit = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
-                if (res.status !== 201) {
+                if (resSubmit.status !== 201) {
                     body = createBugReportCard(formInputs, true)
                     break
                 }
