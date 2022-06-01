@@ -8,8 +8,12 @@ const DEFAULT_SETTING = {
     workDays: 3
 }
 
-async function publishStory(name, description) {
-    DEFAULT_SETTING.owners = await getMemberIdFromName(DEFAULT_SETTING.owners)
+async function publishStory(name, description, requesterMail = '') {
+    DEFAULT_SETTING.owners = await getMemberIdFrompProfileKey(DEFAULT_SETTING.owners)
+    if (requesterMail) {
+        DEFAULT_SETTING.followers = await getMemberIdFrompProfileKey([requesterMail], 'email_address')
+        DEFAULT_SETTING.requester = DEFAULT_SETTING.followers[0]
+    }
     const data = await generateStoryData(name, description, DEFAULT_SETTING)
 
     const res = await fetch(`${SHORTCUT_API}/stories`, {
@@ -26,7 +30,7 @@ async function publishStory(name, description) {
     return res
 }
 
-async function getMemberIdFromName(names) {
+async function getMemberIdFrompProfileKey(list, key = 'name') {
     const res = await fetch(`${SHORTCUT_API}/members`, {
         method: 'GET',
         headers: {
@@ -38,14 +42,14 @@ async function getMemberIdFromName(names) {
     const memberId = []
 
     for (let member of members) {
-        if (names.includes(member.profile.name)) {
+        if (list.includes(member.profile[key])) {
             memberId.push(member.id)
         }
     }
     return memberId
 }
 
-async function generateStoryData(name, description, { owners = [], storyType, workflow, state, startAt = new Date(Date.now()), workDays }) {
+async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(Date.now()), workDays }) {
     const states = await getWorkflowStates(workflow)
     const stateId = getStateIdFromName(states, state)
     const started_at_override = startAt.toISOString()
@@ -54,8 +58,10 @@ async function generateStoryData(name, description, { owners = [], storyType, wo
     return {
         deadline,
         description,
+        follower_ids: followers,
         name,
         owner_ids: owners,
+        requested_by_id: requester,
         started_at_override,
         story_type: storyType,
         workflow_state_id: stateId
