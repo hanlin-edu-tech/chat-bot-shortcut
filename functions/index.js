@@ -37,16 +37,16 @@ exports.convertToShortcut = async (req, res) => {
             try {
                 const { title, product, category, description } = formInputs
                 const senderEmail = req.body.message.sender.email
-                const resSubmit = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
+                const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
-                if (resSubmit.status !== 201) {
+                if (res.status !== 201) {
                     body = createBugReportCard(formInputs, true)
                     break
                 }
 
                 const { space } = req.body.message
                 const storyUrl = (await res.json()).app_url
-                await sendMessageToSpace(`標題：${}\nStory連結；${storyUrl}`, space.name)
+                await sendMessageToSpace(`*標題:* [${product}][${category}][${title}]\n*Story連結:* ${storyUrl}`, space.name)
 
                 body = createSubmittedCard()
             } catch (err) {
