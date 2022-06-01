@@ -1,4 +1,7 @@
+const fetch = require('node-fetch')
+const { google } = require('googleapis')
 const publishStory = require('./shortcutAPI')
+const keyFile = require('./key-file.json')
 
 exports.convertToShortcut = async (req, res) => {
     if (req.method === 'GET' || !req.body.message) {
@@ -42,6 +45,11 @@ exports.convertToShortcut = async (req, res) => {
                     body = createBugReportCard(formInputs, true)
                     break
                 }
+
+                const { space } = req.body.message
+                const storyUrl = (await res.json()).app_url
+                await sendMessageToSpace(`標題：${}\nStory連結；${storyUrl}`, space.name)
+
                 body = createSubmittedCard()
             } catch (err) {
                 body = createBugReportCard(formInputs, true)
@@ -174,4 +182,20 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
             }
         }
     }
+}
+
+async function sendMessageToSpace(message, space) {
+    const jwtClient = new google.auth.JWT(keyFile.client_email, null, keyFile.private_key, ['https://www.googleapis.com/auth/chat.bot'])
+    const token = (await jwtClient.authorize()).access_token
+
+    const res = await fetch(`https://chat.googleapis.com/v1/${space}/messages`, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ text: message })
+    })
+
+    return res
 }
