@@ -1,11 +1,10 @@
 const fetch = require('node-fetch')
 const { google } = require('googleapis')
+const chat = google.chat('v1')
 const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
 const publishStory = require('./shortcutAPI')
 
-const KEY_FILE_NAME = './key-file.json'
-const keyFile = require(KEY_FILE_NAME)
 const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
 
@@ -220,22 +219,19 @@ async function addImageIntoDescription(description, imageRef = '') {
         return description
     }
 
-    const jwtClient = new google.auth.JWT(keyFile.client_email, null, keyFile.private_key, ['https://www.googleapis.com/auth/chat.bot'])
-    const token = (await jwtClient.authorize()).access_token
     const temp = imageRef.split(':')
     const imageType = temp[0].split('/')[1]
     const imageResourceName = temp[1]
+    
+    const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] })
+    const authClient = await auth.getClient()
+    google.options({ auth: authClient })
 
-    const res = await fetch(`https://chat.googleapis.com/v1/media/${imageResourceName}?alt=media`, {
-        method: 'GET',
-        headers: {
-            'authorization': `Bearer ${token}`
-        }
-    })
-
-    const imageBuffer = Buffer.from(await (await res.blob()).arrayBuffer())
+    const res = await chat.media.download({ resourceName: `${imageResourceName}?alt=media` }, { responseType: 'arraybuffer' })
+    
+    const imageBuffer = Buffer.from(res.data)
     const destFileName = `${uuidv4()}.${imageType}`
-    const storage = new Storage({ keyFilename: KEY_FILE_NAME })
+    const storage = new Storage()
 
     await storage.bucket(GCS_BUCKET).file(destFileName).save(imageBuffer)
 
@@ -243,16 +239,15 @@ async function addImageIntoDescription(description, imageRef = '') {
 }
 
 async function sendMessageToSpace(message, space) {
-    const jwtClient = new google.auth.JWT(keyFile.client_email, null, keyFile.private_key, ['https://www.googleapis.com/auth/chat.bot'])
-    const token = (await jwtClient.authorize()).access_token
+    const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] })
+    const authClient = await auth.getClient()
+    google.options({ auth: authClient })
 
-    const res = await fetch(`https://chat.googleapis.com/v1/${space}/messages`, {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            'authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ text: message })
+    const res = await chat.spaces.messages.create({
+        parent: space,
+        requestBody: {
+            text: message
+        }
     })
 
     return res
