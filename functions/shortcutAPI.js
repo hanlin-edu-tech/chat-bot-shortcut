@@ -1,4 +1,5 @@
 const fetch = require('node-fetch')
+
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 const DEFAULT_SETTING = {
     owners: ['熱狗'],
@@ -9,9 +10,10 @@ const DEFAULT_SETTING = {
 }
 
 async function publishStory(name, description, requesterMail = '') {
-    DEFAULT_SETTING.owners = await getMemberIdFrompProfileKey(DEFAULT_SETTING.owners)
+    const members = await getMembers()
+    DEFAULT_SETTING.owners = getMemberIdFrompProfileKey(DEFAULT_SETTING.owners, members)
     if (requesterMail) {
-        DEFAULT_SETTING.followers = await getMemberIdFrompProfileKey([requesterMail], 'email_address')
+        DEFAULT_SETTING.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
         DEFAULT_SETTING.requester = DEFAULT_SETTING.followers[0]
     }
     const data = await generateStoryData(name, description, DEFAULT_SETTING)
@@ -30,7 +32,7 @@ async function publishStory(name, description, requesterMail = '') {
     return res
 }
 
-async function getMemberIdFrompProfileKey(list, key = 'name') {
+async function getMembers() {
     const res = await fetch(`${SHORTCUT_API}/members`, {
         method: 'GET',
         headers: {
@@ -38,7 +40,10 @@ async function getMemberIdFrompProfileKey(list, key = 'name') {
             'shortcut-token': process.env.SHORTCUT_API_TOKEN
         }
     })
-    const members = await res.json()
+    return await res.json()
+}
+
+function getMemberIdFrompProfileKey(list, members, key = 'name') {
     const memberId = []
 
     for (let member of members) {
@@ -49,11 +54,12 @@ async function getMemberIdFrompProfileKey(list, key = 'name') {
     return memberId
 }
 
-async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(Date.now()), workDays }) {
+async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(), workDays }) {
     const states = await getWorkflowStates(workflow)
-    const stateId = getStateIdFromName(states, state)
+    const stateId = states.find(s => s.name === state).id || ''
     const started_at_override = startAt.toISOString()
-    const deadline = (new Date(startAt.getTime() + workDays * 86400 * 1000)).toISOString()
+    const msPerDay = 24 * 60 * 60 * 1000
+    const deadline = (new Date(startAt.getTime() + workDays * msPerDay)).toISOString()
 
     return {
         deadline,
@@ -66,15 +72,6 @@ async function generateStoryData(name, description, { owners = [], followers = [
         story_type: storyType,
         workflow_state_id: stateId
     }
-}
-
-function getStateIdFromName(states, name) {
-    for (let state of states) {
-        if (state.name === name) {
-            return state.id
-        }
-    }
-    return -1
 }
 
 async function getWorkflowStates(workflowName = '') {

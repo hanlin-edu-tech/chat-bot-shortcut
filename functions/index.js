@@ -1,7 +1,13 @@
 const fetch = require('node-fetch')
 const { google } = require('googleapis')
+const { Storage } = require('@google-cloud/storage')
+const { v4: uuidv4 } = require('uuid')
 const publishStory = require('./shortcutAPI')
-const keyFile = require('./key-file.json')
+
+const KEY_FILE_NAME = './key-file.json'
+const keyFile = require(KEY_FILE_NAME)
+const GCS_BUCKET = 'chat-bot-attachment'
+const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
 
 exports.convertToShortcut = async (req, res) => {
     if (req.method === 'GET' || !req.body.message) {
@@ -12,11 +18,15 @@ exports.convertToShortcut = async (req, res) => {
     }
 
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
+    const message = req.body.message
     let body = {}
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
-            body = createBugReportCard()
+            const attachment = message.attachment ? message.attachment : []
+            const imageRef = getAttachmentRef(attachment, 'image')
+
+            body = createBugReportCard({ imageRef })
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
@@ -35,8 +45,9 @@ exports.convertToShortcut = async (req, res) => {
             }
 
             try {
-                const { title, product, category, description } = formInputs
-                const senderEmail = req.body.message.sender.email
+                const { title, product, category, imageRef } = formInputs
+                const description = await addImageIntoDescription(formInputs.description, imageRef)
+                const senderEmail = message.sender.email
                 const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
                 if (res.status !== 201) {
@@ -44,7 +55,7 @@ exports.convertToShortcut = async (req, res) => {
                     break
                 }
 
-                const { space } = req.body.message
+                const { space } = message
                 const storyUrl = (await res.json()).app_url
                 await sendMessageToSpace(`*標題:* [${product}][${category}][${title}]\n*Story連結:* ${storyUrl}`, space.name)
 
@@ -93,7 +104,7 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '' }, isError = false) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, isError = false) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -151,17 +162,32 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
         }
     ]
 
-    const widgets = []
+    const sections = []
+
+    const widgetsInputs = []
     if (isError) {
-        widgets.push(error, hint, ...inputs)
+        widgetsInputs.push(error, hint, ...inputs)
     } else {
-        widgets.push(hint, ...inputs)
+        widgetsInputs.push(hint, ...inputs)
+    }
+
+    const widgetsImg = []
+    if (names.imageRef) {
+        widgetsImg.push({
+            "textInput": {
+                label: `圖片訊息暫存(請勿更動)`,
+                type: 'SINGLE_LINE',
+                name: 'imageRef',
+                value: names.imageRef
+            }
+        })
+        sections.push({ widgets: widgetsInputs }, { widgets: widgetsImg })
+    } else {
+        sections.push({ widgets: widgetsInputs })
     }
 
     return {
-        sections: [{
-            widgets
-        }],
+        sections,
         fixedFooter: {
             primaryButton: {
                 text: '送出',
@@ -180,6 +206,40 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
             }
         }
     }
+}
+
+function getAttachmentRef(attachment, type = '') {
+    if (attachment.length > 0 && attachment[0].contentType.includes(type)) {
+        return `${attachment[0].contentType}:${attachment[0].attachmentDataRef.resourceName}`
+    }
+    return ''
+}
+
+async function addImageIntoDescription(description, imageRef = '') {
+    if (!imageRef) {
+        return description
+    }
+
+    const jwtClient = new google.auth.JWT(keyFile.client_email, null, keyFile.private_key, ['https://www.googleapis.com/auth/chat.bot'])
+    const token = (await jwtClient.authorize()).access_token
+    const temp = imageRef.split(':')
+    const imageType = temp[0].split('/')[1]
+    const imageResourceName = temp[1]
+
+    const res = await fetch(`https://chat.googleapis.com/v1/media/${imageResourceName}?alt=media`, {
+        method: 'GET',
+        headers: {
+            'authorization': `Bearer ${token}`
+        }
+    })
+
+    const imageBuffer = Buffer.from(await (await res.blob()).arrayBuffer())
+    const destFileName = `${uuidv4()}.${imageType}`
+    const storage = new Storage({ keyFilename: KEY_FILE_NAME })
+
+    await storage.bucket(GCS_BUCKET).file(destFileName).save(imageBuffer)
+
+    return description += `\n![${destFileName}](${GCS_HOST}/${destFileName})`
 }
 
 async function sendMessageToSpace(message, space) {
