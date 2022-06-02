@@ -2,7 +2,7 @@ const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 const DEFAULT_SETTING = {
-    owners: ['徐嘉徽'],
+    owners: ['熱狗'],
     storyType: 'bug',
     workflow: '工程-執行',
     state: '待辦',
@@ -50,7 +50,7 @@ async function getMemberIdFrompProfileKey(list, key = 'name') {
     return memberId
 }
 
-async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(Date.now()), workDays }) {
+async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(), workDays }) {
     const states = await getWorkflowStates(workflow)
     const stateId = getStateIdFromName(states, state)
     const started_at_override = startAt.toISOString()

@@ -3,8 +3,9 @@ const { google } = require('googleapis')
 const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
 const publishStory = require('./shortcutAPI')
-const keyFile = require('./key-file.json')
 
+const KEY_FILE_NAME = './key-file.json'
+const keyFile = require(KEY_FILE_NAME)
 const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
 
@@ -23,9 +24,9 @@ exports.convertToShortcut = async (req, res) => {
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
             const attachment = message.attachment ? message.attachment : []
-            const imageId = getAttachmentId(attachment, 'image')
+            const imageRef = getAttachmentRef(attachment, 'image')
 
-            body = createBugReportCard({ imageId })
+            body = createBugReportCard({ imageRef })
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
@@ -44,8 +45,8 @@ exports.convertToShortcut = async (req, res) => {
             }
 
             try {
-                const { title, product, category, imageId } = formInputs
-                const description = await addImageIntoDescription(formInputs.description, message.name, imageId)
+                const { title, product, category, imageRef } = formInputs
+                const description = await addImageIntoDescription(formInputs.description, imageRef)
                 const senderEmail = message.sender.email
                 const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
@@ -103,7 +104,7 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageId: '' }, isError = false) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, isError = false) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -161,6 +162,8 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
         }
     ]
 
+    const sections = []
+
     const widgetsInputs = []
     if (isError) {
         widgetsInputs.push(error, hint, ...inputs)
@@ -169,22 +172,22 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     }
 
     const widgetsImg = []
-    if (names.imageId) {
+    if (names.imageRef) {
         widgetsImg.push({
             "textInput": {
-                label: `圖片暫存`,
+                label: `圖片訊息暫存(請勿更動)`,
                 type: 'SINGLE_LINE',
-                name: 'imageId',
-                value: names.imageId
+                name: 'imageRef',
+                value: names.imageRef
             }
         })
+        sections.push({ widgets: widgetsInputs }, { widgets: widgetsImg })
+    } else {
+        sections.push({ widgets: widgetsInputs })
     }
 
     return {
-        sections: [
-            { widgets: widgetsInputs },
-            { widgets: widgetsImg }
-        ],
+        sections,
         fixedFooter: {
             primaryButton: {
                 text: '送出',
@@ -205,37 +208,34 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     }
 }
 
-function getAttachmentId(attachment, type = '') {
+function getAttachmentRef(attachment, type = '') {
     if (attachment.length > 0 && attachment[0].contentType.includes(type)) {
-        return attachment[0].name.split('/attachments/')[1]
+        return `${attachment[0].contentType}:${attachment[0].attachmentDataRef.resourceName}`
     }
     return ''
 }
 
-async function addImageIntoDescription(description, messageName, imageId = '') {
+async function addImageIntoDescription(description, imageRef = '') {
+    if (!imageRef) {
+        return description
+    }
+
     const jwtClient = new google.auth.JWT(keyFile.client_email, null, keyFile.private_key, ['https://www.googleapis.com/auth/chat.bot'])
     const token = (await jwtClient.authorize()).access_token
+    const temp = imageRef.split(':')
+    const imageType = temp[0].split('/')[1]
+    const imageResourceName = temp[1]
 
-    const resImage = await fetch(`https://chat.googleapis.com/v1/${messageName}/attachments/${imageId}`, {
-        method: 'GET',
-        headers: {
-            'content-type': 'application/json',
-            'authorization': `Bearer ${token}`
-        }
-    })
-
-    const image = await resImage.json()
-    const imageDataRef = image.attachmentDataRef.resourceName
-    const resData = await fetch(`https://chat.googleapis.com/v1/media/${imageDataRef}?alt=media`, {
+    const res = await fetch(`https://chat.googleapis.com/v1/media/${imageResourceName}?alt=media`, {
         method: 'GET',
         headers: {
             'authorization': `Bearer ${token}`
         }
     })
 
-    const imageBuffer = Buffer.from(await (await resData.blob()).arrayBuffer())
-    const destFileName = `${uuidv4()}.png`
-    const storage = new Storage({ keyFilename: 'key-file.json' })
+    const imageBuffer = Buffer.from(await (await res.blob()).arrayBuffer())
+    const destFileName = `${uuidv4()}.${imageType}`
+    const storage = new Storage({ keyFilename: KEY_FILE_NAME })
 
     await storage.bucket(GCS_BUCKET).file(destFileName).save(imageBuffer)
 
