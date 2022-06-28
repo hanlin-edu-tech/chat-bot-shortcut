@@ -18,14 +18,27 @@ exports.convertToShortcut = async (req, res) => {
 
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     const message = req.body.message
+    const commandId = message.slashCommand ? parseInt(message.slashCommand.commandId) : -1
     let body = {}
+    let createCard
+
+    switch (commandId) {
+        case 1:
+            createCard = createBugReportCard
+            break
+        case 2:
+            createCard = createcComplaintReportCard
+            break
+        default:
+            return
+    }
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
             const attachment = message.attachment ? message.attachment : []
             const imageRef = getAttachmentRef(attachment, 'image')
 
-            body = createBugReportCard({ imageRef })
+            body = createCard({ imageRef })
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
@@ -39,7 +52,7 @@ exports.convertToShortcut = async (req, res) => {
             }
 
             if (!isValid) {
-                body = createBugReportCard(formInputs)
+                body = createCard(formInputs)
                 break
             }
 
@@ -50,7 +63,7 @@ exports.convertToShortcut = async (req, res) => {
                 const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
                 if (res.status !== 201) {
-                    body = createBugReportCard(formInputs, true)
+                    body = createCard(formInputs, true)
                     break
                 }
 
@@ -60,7 +73,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 body = createSubmittedCard()
             } catch (err) {
-                body = createBugReportCard(formInputs, true)
+                body = createCard(formInputs, true)
                 console.log(err)
             }
 
@@ -163,11 +176,11 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
 
     const sections = []
 
-    const widgetsInputs = []
+    const widgetsSelectionInputs = []
     if (isError) {
-        widgetsInputs.push(error, hint, ...inputs)
+        widgetsSelectionInputs.push(error, hint, ...inputs)
     } else {
-        widgetsInputs.push(hint, ...inputs)
+        widgetsSelectionInputs.push(hint, ...inputs)
     }
 
     const widgetsImg = []
@@ -180,9 +193,164 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
                 value: names.imageRef
             }
         })
-        sections.push({ widgets: widgetsInputs }, { widgets: widgetsImg })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: widgetsImg })
     } else {
-        sections.push({ widgets: widgetsInputs })
+        sections.push({ widgets: widgetsSelectionInputs })
+    }
+
+    return {
+        sections,
+        fixedFooter: {
+            primaryButton: {
+                text: '送出',
+                onClick: {
+                    action: {
+                        function: 'SUBMIT'
+                    }
+                },
+                altText: 'submit',
+                color: {
+                    red: 0.204,
+                    green: 0.596,
+                    blue: 0.859,
+                    alpha: 1
+                }
+            }
+        }
+    }
+}
+
+function createcComplaintReportCard(names = { project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, isError = false) {
+    const error = {
+        decoratedText: {
+            topLabel: '',
+            text: '回報過程發生問題，請稍後再試。',
+            startIcon: {
+                knownIcon: 'STAR',
+                altText: 'report submitting error'
+            }
+        }
+    }
+
+    const hint = {
+        decoratedText: {
+            topLabel: '',
+            text: '所有項目皆為必填！',
+            startIcon: {
+                knownIcon: 'STAR',
+                altText: 'all fields are required'
+            }
+        }
+    }
+
+    const selectionInputs = [
+        {
+            selectionInput: {
+                type: 'DROPDOWN',
+                name: 'project',
+                items: [
+                    {
+                        text: '專案',
+                        value: '',
+                        selected: true
+                    }
+                ]
+            }
+        },
+        {
+            selectionInput: {
+                type: 'DROPDOWN',
+                name: 'type',
+                items: [
+                    {
+                        text: '類別',
+                        value: '',
+                        selected: true
+                    },
+                    {
+                        text: '系統問題',
+                        value: 'bug',
+                        selected: true
+                    },
+                    {
+                        text: '功能建議',
+                        value: 'feature',
+                        selected: true
+                    }
+                ]
+            }
+        },
+        {
+            selectionInput: {
+                type: 'DROPDOWN',
+                name: 'priority',
+                items: [
+                    {
+                        text: '急迫性',
+                        value: '',
+                        selected: true
+                    },
+                    {
+                        text: '特急件 (需立即處理；開卡後請同步電話通知企劃)',
+                        value: 'Highest',
+                        selected: false
+                    },
+                    {
+                        text: '急件 (需三天內處理；開卡後請同步chat通知企劃)',
+                        value: 'High',
+                        selected: false
+                    },
+                    {
+                        text: '正常 (依正常時程處理；不需另外通知)',
+                        value: 'None',
+                        selected: false
+                    }
+                ]
+            }
+        }
+    ]
+
+    const inputs = [
+        {
+            textInput: {
+                label: '標題',
+                type: 'SINGLE_LINE',
+                name: 'title',
+                value: names.title
+            }
+        },
+        {
+            textInput: {
+                label: '說明',
+                type: 'MULTIPLE_LINE',
+                name: 'description',
+                value: names.description
+            }
+        }
+    ]
+
+    const sections = []
+
+    const widgetsSelectionInputs = []
+    if (isError) {
+        widgetsSelectionInputs.push(error, hint, ...selectionInputs)
+    } else {
+        widgetsSelectionInputs.push(hint, ...selectionInputs)
+    }
+
+    const widgetsImg = []
+    if (names.imageRef) {
+        widgetsImg.push({
+            "textInput": {
+                label: `圖片訊息暫存(請勿更動)`,
+                type: 'SINGLE_LINE',
+                name: 'imageRef',
+                value: names.imageRef
+            }
+        })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs }, { widgets: widgetsImg })
+    } else {
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs })
     }
 
     return {

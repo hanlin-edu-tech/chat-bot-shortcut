@@ -2,7 +2,7 @@ const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 const DEFAULT_SETTING = {
-    owners: ['熱狗'],
+    owners: ['徐嘉徽'],
     storyType: 'bug',
     workflow: '工程-執行',
     state: '待辦',
