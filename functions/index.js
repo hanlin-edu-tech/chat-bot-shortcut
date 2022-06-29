@@ -1,4 +1,3 @@
-const fetch = require('node-fetch')
 const { google } = require('googleapis')
 const chat = google.chat('v1')
 const { Storage } = require('@google-cloud/storage')
@@ -9,6 +8,7 @@ const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
 
 const BUG_REPORT_SETTING = {
+    template_id: 1,
     owners: ['徐嘉徽'],
     storyType: 'bug',
     workflow: '工程-執行',
@@ -17,6 +17,7 @@ const BUG_REPORT_SETTING = {
 }
 
 const COMPLAINT_REPORT_SETTING = {
+    template_id: 2,
     owners: ['chhsu0421@ehanlin.com.tw'],
     storyType: '',
     workflow: '專案主板',
@@ -37,8 +38,6 @@ exports.convertToShortcut = async (req, res) => {
     const message = req.body.message
     let body = {}
     let commandId
-
-    console.log(req.body)
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
@@ -61,8 +60,6 @@ exports.convertToShortcut = async (req, res) => {
             let isValid = true
             let createCard
 
-            console.log(formInputs)
-
             commandId = parseInt(formInputs.commandId.stringInputs.value[0])
             switch (commandId) {
                 case 1:
@@ -75,7 +72,6 @@ exports.convertToShortcut = async (req, res) => {
 
             for (let key in formInputs) {
                 formInputs[key] = formInputs[key].stringInputs.value[0]
-                console.log(`${key}:${formInputs[key]}`)
                 if (!formInputs[key]) {
                     isValid = false
                 }
@@ -90,19 +86,21 @@ exports.convertToShortcut = async (req, res) => {
                 const { title, product, category, project, type, priority, imageRef } = formInputs
                 const description = await addImageIntoDescription(formInputs.description, imageRef)
                 const senderEmail = message.sender.email
+                let messageTitle = ''
                 let res
 
                 switch (commandId) {
                     case 1:
                         res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail, BUG_REPORT_SETTING)
+                        messageTitle = `[${product}][${category}][${title}]`
                         break
                     case 2:
                         const temp = project.split(':')
-                        // if (temp[1]) { COMPLAINT_REPORT_SETTING.owners.push(temp[1]) }
+                        // COMPLAINT_REPORT_SETTING.owners.push(temp[1])
                         COMPLAINT_REPORT_SETTING.storyType = type
                         COMPLAINT_REPORT_SETTING.project = temp[0]
                         COMPLAINT_REPORT_SETTING.priority = priority
-                        console.log(COMPLAINT_REPORT_SETTING)
+                        messageTitle = title
 
                         res = await publishStory(title, description, senderEmail, COMPLAINT_REPORT_SETTING)
                         break
@@ -115,7 +113,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 const { space } = message
                 const storyUrl = (await res.json()).app_url
-                await sendMessageToSpace(`*標題:* [${product}][${category}][${title}]\n*Story連結:* ${storyUrl}`, space.name)
+                await sendMessageToSpace(`*標題:* ${messageTitle}\n*Story連結:* ${storyUrl}`, space.name)
 
                 body = createSubmittedCard()
             } catch (err) {
@@ -223,6 +221,7 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     const commandIdTag = [
         {
             textInput: {
+                label: `Command ID暫存(請勿更動)`,
                 type: 'SINGLE_LINE',
                 name: 'commandId',
                 value: commandId
@@ -390,6 +389,7 @@ async function createcComplaintReportCard(names = { project: '', type: '', prior
     const commandIdTag = [
         {
             textInput: {
+                label: `Command ID暫存(請勿更動)`,
                 type: 'SINGLE_LINE',
                 name: 'commandId',
                 value: commandId

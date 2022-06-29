@@ -4,7 +4,13 @@ const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 
 async function publishStory(name, description, requesterMail = '', setting) {
     const members = await getMembers()
-    setting.owners = getMemberIdFrompProfileKey(setting.owners, members)
+
+    if (setting.owners[0].match(/[\w\-.]*@ehanlin.com.tw/)) {
+        setting.owners = getMemberIdFrompProfileKey(setting.owners, members, 'email_address')
+    } else {
+        setting.owners = getMemberIdFrompProfileKey(setting.owners, members)
+    }
+
     if (requesterMail) {
         setting.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
         setting.requester = setting.followers[0]
@@ -47,23 +53,51 @@ function getMemberIdFrompProfileKey(list, members, key = 'name') {
     return memberId
 }
 
-async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(), workDays }) {
+async function generateStoryData(name, description, { template_id, owners = [], followers = [], requester = '', storyType, workflow, state, project = '', priority, startAt = new Date(), workDays }) {
     const states = await getWorkflowStates(workflow)
     const stateId = states.find(s => s.name === state).id || ''
     const started_at_override = startAt.toISOString()
     const msPerDay = 24 * 60 * 60 * 1000
-    const deadline = (new Date(startAt.getTime() + workDays * msPerDay)).toISOString()
+    const deadline = workDays ? (new Date(startAt.getTime() + workDays * msPerDay)).toISOString() : ''
+    const custom_fields = []
 
-    return {
-        deadline,
-        description,
-        follower_ids: followers,
-        name,
-        owner_ids: owners,
-        requested_by_id: requester,
-        started_at_override,
-        story_type: storyType,
-        workflow_state_id: stateId
+    if (priority && priority !== 'None') {
+        const priorityField = await getCustomField('Priority')
+        custom_fields.push({
+            field_id: priorityField.id,
+            value: priority,
+            value_id: priorityField.values.filter(i => i.value === priority)[0].id
+        })
+    }
+
+    switch (template_id) {
+        case 1:
+            return {
+                deadline,
+                description,
+                follower_ids: followers,
+                name,
+                owner_ids: owners,
+                requested_by_id: requester,
+                started_at_override,
+                story_type: storyType,
+                workflow_state_id: stateId
+            }
+        case 2:
+            return {
+                custom_fields,
+                description,
+                follower_ids: followers,
+                name,
+                owner_ids: owners,
+                project_id: project,
+                requested_by_id: requester,
+                started_at_override,
+                story_type: storyType,
+                workflow_state_id: stateId
+            }
+        default:
+            return {}
     }
 }
 
@@ -85,6 +119,23 @@ async function getWorkflowStates(workflowName = '') {
     }
 
     return states
+}
+
+async function getCustomField(fieldName = '') {
+    const res = await fetch('https://api.app.shortcut.com/api/v3/custom-fields', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const fields = await res.json()
+    const field = fields.filter(field => field.name === fieldName)[0]
+
+    return {
+        id: field.id,
+        values: field.values
+    }
 }
 
 async function getProjects(workflowName = '') {
