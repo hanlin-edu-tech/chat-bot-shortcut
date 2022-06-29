@@ -1,22 +1,15 @@
 const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
-const DEFAULT_SETTING = {
-    owners: ['徐嘉徽'],
-    storyType: 'bug',
-    workflow: '工程-執行',
-    state: '待辦',
-    workDays: 3
-}
 
-async function publishStory(name, description, requesterMail = '') {
+async function publishStory(name, description, requesterMail = '', setting) {
     const members = await getMembers()
-    DEFAULT_SETTING.owners = getMemberIdFrompProfileKey(DEFAULT_SETTING.owners, members)
+    setting.owners = getMemberIdFrompProfileKey(setting.owners, members)
     if (requesterMail) {
-        DEFAULT_SETTING.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
-        DEFAULT_SETTING.requester = DEFAULT_SETTING.followers[0]
+        setting.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
+        setting.requester = setting.followers[0]
     }
-    const data = await generateStoryData(name, description, DEFAULT_SETTING)
+    const data = await generateStoryData(name, description, setting)
 
     const res = await fetch(`${SHORTCUT_API}/stories`, {
         method: 'POST',
@@ -94,4 +87,38 @@ async function getWorkflowStates(workflowName = '') {
     return states
 }
 
-module.exports = publishStory
+async function getProjects(workflowName = '') {
+    const resWorkflow = await fetch('https://api.app.shortcut.com/api/v3/workflows', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const workflows = await resWorkflow.json()
+    const workflowId = workflows.filter(workflow => workflow.name === workflowName)[0].id
+
+    const res = await fetch('https://api.app.shortcut.com/api/v3/projects', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const projects = (await res.json()).filter(project => project.workflow_id === workflowId)
+    const projectItems = projects.map(project => {
+        let owner = project.description.match(/[\w\-.]*@ehanlin.com.tw/) || []
+        owner = owner.length ? owner[0] : ''
+
+        return {
+            text: project.name,
+            value: `${project.id}:${owner}`,
+            selected: false
+        }
+    })
+
+    return projectItems
+}
+
+module.exports.publishStory = publishStory
+module.exports.getProjects = getProjects

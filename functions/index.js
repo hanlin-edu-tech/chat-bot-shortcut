@@ -3,10 +3,27 @@ const { google } = require('googleapis')
 const chat = google.chat('v1')
 const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
-const publishStory = require('./shortcutAPI')
+const { publishStory, getProjects } = require('./shortcutAPI')
 
 const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
+
+const BUG_REPORT_SETTING = {
+    owners: ['徐嘉徽'],
+    storyType: 'bug',
+    workflow: '工程-執行',
+    state: '待辦',
+    workDays: 3
+}
+
+const COMPLAINT_REPORT_SETTING = {
+    owners: ['chhsu0421@ehanlin.com.tw'],
+    storyType: '',
+    workflow: '專案主板',
+    state: '客訴區',
+    project: '',
+    priority: ''
+}
 
 exports.convertToShortcut = async (req, res) => {
     if (req.method === 'GET' || !req.body.message) {
@@ -18,31 +35,31 @@ exports.convertToShortcut = async (req, res) => {
 
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     const message = req.body.message
-    let commandId = message.slashCommand ? parseInt(message.slashCommand.commandId) : -1
     let body = {}
-    let createCard
+    let commandId
 
-    console.log(message)
-
-    switch (commandId) {
-        case 1:
-            createCard = createBugReportCard
-            break
-        case 2:
-            createCard = createcComplaintReportCard
-            break
-    }
+    console.log(req.body)
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
             const attachment = message.attachment ? message.attachment : []
             const imageRef = getAttachmentRef(attachment, 'image')
 
-            body = createCard({ imageRef }, commandId)
+            commandId = parseInt(message.slashCommand.commandId)
+            switch (commandId) {
+                case 1:
+                    body = createBugReportCard({ imageRef }, commandId)
+                    break
+                case 2:
+                    body = await createcComplaintReportCard({ imageRef }, commandId)
+                    break
+            }
+
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
             let isValid = true
+            let createCard
 
             console.log(formInputs)
 
@@ -58,24 +75,41 @@ exports.convertToShortcut = async (req, res) => {
 
             for (let key in formInputs) {
                 formInputs[key] = formInputs[key].stringInputs.value[0]
+                console.log(`${key}:${formInputs[key]}`)
                 if (!formInputs[key]) {
                     isValid = false
                 }
             }
 
             if (!isValid) {
-                body = createCard(formInputs, commandId)
+                body = await createCard(formInputs, commandId)
                 break
             }
 
             try {
-                const { title, product, category, imageRef } = formInputs
+                const { title, product, category, project, type, priority, imageRef } = formInputs
                 const description = await addImageIntoDescription(formInputs.description, imageRef)
                 const senderEmail = message.sender.email
-                const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
+                let res
+
+                switch (commandId) {
+                    case 1:
+                        res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail, BUG_REPORT_SETTING)
+                        break
+                    case 2:
+                        const temp = project.split(':')
+                        // if (temp[1]) { COMPLAINT_REPORT_SETTING.owners.push(temp[1]) }
+                        COMPLAINT_REPORT_SETTING.storyType = type
+                        COMPLAINT_REPORT_SETTING.project = temp[0]
+                        COMPLAINT_REPORT_SETTING.priority = priority
+                        console.log(COMPLAINT_REPORT_SETTING)
+
+                        res = await publishStory(title, description, senderEmail, COMPLAINT_REPORT_SETTING)
+                        break
+                }
 
                 if (res.status !== 201) {
-                    body = createCard(formInputs, commandId, true)
+                    body = await createCard(formInputs, commandId, true)
                     break
                 }
 
@@ -85,7 +119,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 body = createSubmittedCard()
             } catch (err) {
-                body = createCard(formInputs, commandId, true)
+                body = await createCard(formInputs, commandId, true)
                 console.log(err)
             }
 
@@ -242,7 +276,7 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     }
 }
 
-function createcComplaintReportCard(names = { project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, isError = false) {
+async function createcComplaintReportCard(names = { project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -331,6 +365,8 @@ function createcComplaintReportCard(names = { project: '', type: '', priority: '
             }
         }
     ]
+    const projects = await getProjects(COMPLAINT_REPORT_SETTING.workflow)
+    selectionInputs[0].selectionInput.items.push(...projects)
 
     const inputs = [
         {
@@ -347,6 +383,16 @@ function createcComplaintReportCard(names = { project: '', type: '', priority: '
                 type: 'MULTIPLE_LINE',
                 name: 'description',
                 value: names.description
+            }
+        }
+    ]
+
+    const commandIdTag = [
+        {
+            textInput: {
+                type: 'SINGLE_LINE',
+                name: 'commandId',
+                value: commandId
             }
         }
     ]
@@ -370,9 +416,9 @@ function createcComplaintReportCard(names = { project: '', type: '', priority: '
                 value: names.imageRef
             }
         })
-        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs }, { widgets: widgetsImg })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs }, { widgets: widgetsImg }, { widgets: commandIdTag })
     } else {
-        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: inputs }, { widgets: commandIdTag })
     }
 
     return {
