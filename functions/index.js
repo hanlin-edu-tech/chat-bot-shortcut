@@ -18,9 +18,11 @@ exports.convertToShortcut = async (req, res) => {
 
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     const message = req.body.message
-    const commandId = message.slashCommand ? parseInt(message.slashCommand.commandId) : -1
+    let commandId = message.slashCommand ? parseInt(message.slashCommand.commandId) : -1
     let body = {}
     let createCard
+
+    console.log(message)
 
     switch (commandId) {
         case 1:
@@ -29,8 +31,6 @@ exports.convertToShortcut = async (req, res) => {
         case 2:
             createCard = createcComplaintReportCard
             break
-        default:
-            return
     }
 
     switch (dialogEventType) {
@@ -38,11 +38,23 @@ exports.convertToShortcut = async (req, res) => {
             const attachment = message.attachment ? message.attachment : []
             const imageRef = getAttachmentRef(attachment, 'image')
 
-            body = createCard({ imageRef })
+            body = createCard({ imageRef }, commandId)
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
             let isValid = true
+
+            console.log(formInputs)
+
+            commandId = parseInt(formInputs.commandId.stringInputs.value[0])
+            switch (commandId) {
+                case 1:
+                    createCard = createBugReportCard
+                    break
+                case 2:
+                    createCard = createcComplaintReportCard
+                    break
+            }
 
             for (let key in formInputs) {
                 formInputs[key] = formInputs[key].stringInputs.value[0]
@@ -52,7 +64,7 @@ exports.convertToShortcut = async (req, res) => {
             }
 
             if (!isValid) {
-                body = createCard(formInputs)
+                body = createCard(formInputs, commandId)
                 break
             }
 
@@ -63,7 +75,7 @@ exports.convertToShortcut = async (req, res) => {
                 const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
 
                 if (res.status !== 201) {
-                    body = createCard(formInputs, true)
+                    body = createCard(formInputs, commandId, true)
                     break
                 }
 
@@ -73,7 +85,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 body = createSubmittedCard()
             } catch (err) {
-                body = createCard(formInputs, true)
+                body = createCard(formInputs, commandId, true)
                 console.log(err)
             }
 
@@ -116,7 +128,7 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, isError = false) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -174,6 +186,16 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
         }
     ]
 
+    const commandIdTag = [
+        {
+            textInput: {
+                type: 'SINGLE_LINE',
+                name: 'commandId',
+                value: commandId
+            }
+        }
+    ]
+
     const sections = []
 
     const widgetsSelectionInputs = []
@@ -193,9 +215,9 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
                 value: names.imageRef
             }
         })
-        sections.push({ widgets: widgetsSelectionInputs }, { widgets: widgetsImg })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: widgetsImg }, { widgets: commandIdTag })
     } else {
-        sections.push({ widgets: widgetsSelectionInputs })
+        sections.push({ widgets: widgetsSelectionInputs }, { widgets: commandIdTag })
     }
 
     return {
