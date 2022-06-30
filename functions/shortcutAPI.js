@@ -1,22 +1,22 @@
 const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
-const DEFAULT_SETTING = {
-    owners: ['熱狗'],
-    storyType: 'bug',
-    workflow: '工程-執行',
-    state: '待辦',
-    workDays: 3
-}
+const emailRegex = /[\w\-.]*@ehanlin\.com\.tw/
 
-async function publishStory(name, description, requesterMail = '') {
+async function publishStory(name, description, requesterMail = '', setting) {
     const members = await getMembers()
-    DEFAULT_SETTING.owners = getMemberIdFrompProfileKey(DEFAULT_SETTING.owners, members)
-    if (requesterMail) {
-        DEFAULT_SETTING.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
-        DEFAULT_SETTING.requester = DEFAULT_SETTING.followers[0]
+
+    if (setting.owners[0].match(emailRegex)) {
+        setting.owners = getMemberIdFrompProfileKey(setting.owners, members, 'email_address')
+    } else {
+        setting.owners = getMemberIdFrompProfileKey(setting.owners, members)
     }
-    const data = await generateStoryData(name, description, DEFAULT_SETTING)
+
+    if (requesterMail) {
+        setting.followers = getMemberIdFrompProfileKey([requesterMail], members, 'email_address')
+        setting.requester = setting.followers[0]
+    }
+    const data = await generateStoryData(name, description, setting)
 
     const res = await fetch(`${SHORTCUT_API}/stories`, {
         method: 'POST',
@@ -54,23 +54,51 @@ function getMemberIdFrompProfileKey(list, members, key = 'name') {
     return memberId
 }
 
-async function generateStoryData(name, description, { owners = [], followers = [], requester = '', storyType, workflow, state, startAt = new Date(), workDays }) {
+async function generateStoryData(name, description, { template_id, owners = [], followers = [], requester = '', storyType, workflow, state, project = '', priority, startAt = new Date(), workDays }) {
     const states = await getWorkflowStates(workflow)
     const stateId = states.find(s => s.name === state).id || ''
     const started_at_override = startAt.toISOString()
     const msPerDay = 24 * 60 * 60 * 1000
-    const deadline = (new Date(startAt.getTime() + workDays * msPerDay)).toISOString()
+    const deadline = workDays ? (new Date(startAt.getTime() + workDays * msPerDay)).toISOString() : ''
+    const custom_fields = []
 
-    return {
-        deadline,
-        description,
-        follower_ids: followers,
-        name,
-        owner_ids: owners,
-        requested_by_id: requester,
-        started_at_override,
-        story_type: storyType,
-        workflow_state_id: stateId
+    if (priority && priority !== 'None') {
+        const priorityField = await getCustomField('Priority')
+        custom_fields.push({
+            field_id: priorityField.id,
+            value: priority,
+            value_id: priorityField.values.filter(i => i.value === priority)[0].id
+        })
+    }
+
+    switch (template_id) {
+        case 1:
+            return {
+                deadline,
+                description,
+                follower_ids: followers,
+                name,
+                owner_ids: owners,
+                requested_by_id: requester,
+                started_at_override,
+                story_type: storyType,
+                workflow_state_id: stateId
+            }
+        case 2:
+            return {
+                custom_fields,
+                description,
+                follower_ids: followers,
+                name,
+                owner_ids: owners,
+                project_id: project,
+                requested_by_id: requester,
+                started_at_override,
+                story_type: storyType,
+                workflow_state_id: stateId
+            }
+        default:
+            return {}
     }
 }
 
@@ -94,4 +122,55 @@ async function getWorkflowStates(workflowName = '') {
     return states
 }
 
-module.exports = publishStory
+async function getCustomField(fieldName = '') {
+    const res = await fetch('https://api.app.shortcut.com/api/v3/custom-fields', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const fields = await res.json()
+    const field = fields.filter(field => field.name === fieldName)[0]
+
+    return {
+        id: field.id,
+        values: field.values
+    }
+}
+
+async function getProjects(workflowName = '') {
+    const resWorkflow = await fetch('https://api.app.shortcut.com/api/v3/workflows', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const workflows = await resWorkflow.json()
+    const workflowId = workflows.filter(workflow => workflow.name === workflowName)[0].id
+
+    const res = await fetch('https://api.app.shortcut.com/api/v3/projects', {
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json',
+            'shortcut-token': process.env.SHORTCUT_API_TOKEN
+        }
+    })
+    const projects = (await res.json()).filter(project => project.workflow_id === workflowId)
+    const projectItems = projects.map(project => {
+        let owner = project.description.match(emailRegex) || []
+        owner = owner.length ? owner[0] : ''
+
+        return {
+            text: project.name,
+            value: `${project.id}:${owner}`,
+            selected: false
+        }
+    })
+
+    return projectItems
+}
+
+module.exports.publishStory = publishStory
+module.exports.getProjects = getProjects

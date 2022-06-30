@@ -1,12 +1,31 @@
-const fetch = require('node-fetch')
 const { google } = require('googleapis')
 const chat = google.chat('v1')
 const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
-const publishStory = require('./shortcutAPI')
+const { publishStory } = require('./shortcutAPI')
+const { createSubmittedCard, createBugReportCard, createcComplaintReportCard } = require('./cards')
 
 const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
+
+const BUG_REPORT_SETTING = {
+    template_id: 1,
+    owners: ['熱狗'],
+    storyType: 'bug',
+    workflow: '工程-執行',
+    state: '待辦',
+    workDays: 3
+}
+
+const COMPLAINT_REPORT_SETTING = {
+    template_id: 2,
+    owners: [],
+    storyType: '',
+    workflow: '專案主板',
+    state: '客訴區',
+    project: '',
+    priority: ''
+}
 
 exports.convertToShortcut = async (req, res) => {
     if (req.method === 'GET' || !req.body.message) {
@@ -19,17 +38,38 @@ exports.convertToShortcut = async (req, res) => {
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     const message = req.body.message
     let body = {}
+    let commandId
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
             const attachment = message.attachment ? message.attachment : []
             const imageRef = getAttachmentRef(attachment, 'image')
 
-            body = createBugReportCard({ imageRef })
+            commandId = parseInt(message.slashCommand.commandId)
+            switch (commandId) {
+                case 1:
+                    body = createBugReportCard({ imageRef }, commandId)
+                    break
+                case 2:
+                    body = await createcComplaintReportCard({ workflow: COMPLAINT_REPORT_SETTING.workflow, imageRef }, commandId)
+                    break
+            }
+
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
             let isValid = true
+            let createCard
+
+            commandId = parseInt(formInputs.commandId.stringInputs.value[0])
+            switch (commandId) {
+                case 1:
+                    createCard = createBugReportCard
+                    break
+                case 2:
+                    createCard = createcComplaintReportCard
+                    break
+            }
 
             for (let key in formInputs) {
                 formInputs[key] = formInputs[key].stringInputs.value[0]
@@ -37,30 +77,57 @@ exports.convertToShortcut = async (req, res) => {
                     isValid = false
                 }
             }
+            formInputs.workflow = COMPLAINT_REPORT_SETTING.workflow
 
             if (!isValid) {
-                body = createBugReportCard(formInputs)
+                body = await createCard(formInputs, commandId)
                 break
             }
 
             try {
-                const { title, product, category, imageRef } = formInputs
+                const { title, product, category, project, type, priority, imageRef } = formInputs
                 const description = await addImageIntoDescription(formInputs.description, imageRef)
                 const senderEmail = message.sender.email
-                const res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail)
+                let res
+
+                switch (commandId) {
+                    case 1:
+                        res = await publishStory(`[${product}][${category}][${title}]`, description, senderEmail, BUG_REPORT_SETTING)
+                        
+                        break
+                    case 2:
+                        const temp = project.split(':')
+                        COMPLAINT_REPORT_SETTING.owners.push(temp[1])
+                        COMPLAINT_REPORT_SETTING.storyType = type
+                        COMPLAINT_REPORT_SETTING.project = temp[0]
+                        COMPLAINT_REPORT_SETTING.priority = priority
+
+                        res = await publishStory(title, description, senderEmail, COMPLAINT_REPORT_SETTING)
+                        break
+                }
 
                 if (res.status !== 201) {
-                    body = createBugReportCard(formInputs, true)
+                    body = await createCard(formInputs, commandId, true)
                     break
                 }
 
                 const { space } = message
                 const storyUrl = (await res.json()).app_url
-                await sendMessageToSpace(`*標題:* [${product}][${category}][${title}]\n*Story連結:* ${storyUrl}`, space.name)
+                let messageContent = ''
+
+                switch (commandId) {
+                    case 1:
+                        messageContent = `*標題:* [${product}][${category}][${title}]\n*Story連結:* ${storyUrl}`
+                        break
+                    case 2:
+                        messageContent = `已完成開卡\n\n*標題:* ${title}\n*Story連結:* ${storyUrl}\n\n卡片進度將會通過E-mail通知，請留意信件。`
+                        break
+                }
+                await sendMessageToSpace(messageContent, space.name)
 
                 body = createSubmittedCard()
             } catch (err) {
-                body = createBugReportCard(formInputs, true)
+                body = await createCard(formInputs, commandId, true)
                 console.log(err)
             }
 
@@ -80,131 +147,6 @@ exports.convertToShortcut = async (req, res) => {
         }
     }
     res.status(200).send(JSON.stringify(data))
-}
-
-function createSubmittedCard() {
-    return {
-        sections: [
-            {
-                widgets: [
-                    {
-                        decoratedText: {
-                            topLabel: '',
-                            text: '送出成功！',
-                            startIcon: {
-                                knownIcon: 'STAR',
-                                altText: 'report submitted'
-                            }
-                        }
-                    }
-                ]
-            }
-        ]
-    }
-}
-
-function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, isError = false) {
-    const error = {
-        decoratedText: {
-            topLabel: '',
-            text: '回報過程發生問題，請稍後再試。',
-            startIcon: {
-                knownIcon: 'STAR',
-                altText: 'report submitting error'
-            }
-        }
-    }
-
-    const hint = {
-        decoratedText: {
-            topLabel: '',
-            text: '所有項目皆為必填！',
-            startIcon: {
-                knownIcon: 'STAR',
-                altText: 'all fields are required'
-            }
-        }
-    }
-
-    const inputs = [
-        {
-            textInput: {
-                label: '標題',
-                type: 'SINGLE_LINE',
-                name: 'title',
-                value: names.title
-            }
-        },
-        {
-            textInput: {
-                label: '產品名稱',
-                type: 'SINGLE_LINE',
-                name: 'product',
-                value: names.product
-            }
-        },
-        {
-            textInput: {
-                label: '分類',
-                type: 'SINGLE_LINE',
-                name: 'category',
-                value: names.category
-            }
-        },
-        {
-            textInput: {
-                label: '細節描述',
-                type: 'MULTIPLE_LINE',
-                name: 'description',
-                value: names.description
-            }
-        }
-    ]
-
-    const sections = []
-
-    const widgetsInputs = []
-    if (isError) {
-        widgetsInputs.push(error, hint, ...inputs)
-    } else {
-        widgetsInputs.push(hint, ...inputs)
-    }
-
-    const widgetsImg = []
-    if (names.imageRef) {
-        widgetsImg.push({
-            "textInput": {
-                label: `圖片訊息暫存(請勿更動)`,
-                type: 'SINGLE_LINE',
-                name: 'imageRef',
-                value: names.imageRef
-            }
-        })
-        sections.push({ widgets: widgetsInputs }, { widgets: widgetsImg })
-    } else {
-        sections.push({ widgets: widgetsInputs })
-    }
-
-    return {
-        sections,
-        fixedFooter: {
-            primaryButton: {
-                text: '送出',
-                onClick: {
-                    action: {
-                        function: 'SUBMIT'
-                    }
-                },
-                altText: 'submit',
-                color: {
-                    red: 0.204,
-                    green: 0.596,
-                    blue: 0.859,
-                    alpha: 1
-                }
-            }
-        }
-    }
 }
 
 function getAttachmentRef(attachment, type = '') {
