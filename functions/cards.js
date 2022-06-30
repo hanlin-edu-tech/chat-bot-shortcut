@@ -228,10 +228,9 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
     const projects = await getProjects(names.workflow)
     selectionInputs[0].selectionInput.items.push(...projects)
 
-    selectionInputs.forEach(item => {
-        const selectedValue = names[item.selectionInput.name]
-        item.selectionInput.items.forEach(item => {
-            item.selected = item.value === selectedValue ? true : false
+    selectionInputs.forEach(input => {
+        input.selectionInput.items.forEach(item => {
+            item.selected = item.value === names[input.selectionInput.name] ? true : false
         })        
     })
 

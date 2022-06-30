@@ -1,11 +1,12 @@
 const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
+const emailRegex = /[\w\-.]*@ehanlin\.com\.tw/
 
 async function publishStory(name, description, requesterMail = '', setting) {
     const members = await getMembers()
 
-    if (setting.owners[0].match(/[\w\-.]*@ehanlin.com.tw/)) {
+    if (setting.owners[0].match(emailRegex)) {
         setting.owners = getMemberIdFrompProfileKey(setting.owners, members, 'email_address')
     } else {
         setting.owners = getMemberIdFrompProfileKey(setting.owners, members)
@@ -158,7 +159,7 @@ async function getProjects(workflowName = '') {
     })
     const projects = (await res.json()).filter(project => project.workflow_id === workflowId)
     const projectItems = projects.map(project => {
-        let owner = project.description.match(/[\w\-.]*@ehanlin.com.tw/) || []
+        let owner = project.description.match(emailRegex) || []
         owner = owner.length ? owner[0] : ''
 
         return {
