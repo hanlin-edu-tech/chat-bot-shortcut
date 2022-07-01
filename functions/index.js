@@ -113,6 +113,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 const { space } = message
                 const storyUrl = (await res.json()).app_url
+                // const storyUrl = ''
                 let messageContent = ''
 
                 switch (commandId) {
@@ -125,7 +126,7 @@ exports.convertToShortcut = async (req, res) => {
                 }
                 await sendMessageToSpace(messageContent, space.name)
 
-                body = createSubmittedCard()
+                // body = createSubmittedCard()
             } catch (err) {
                 body = await createCard(formInputs, commandId, true)
                 console.log(err)
@@ -146,7 +147,14 @@ exports.convertToShortcut = async (req, res) => {
             type: 'DIALOG'
         }
     }
-    res.status(200).send(JSON.stringify(data))
+
+    if (Object.keys(body).length) {
+        return res.status(200).send(JSON.stringify(data))    
+    }
+    res.status(200).json({
+        status: 'sucess',
+        message: 'report submmited'
+    })
 }
 
 function getAttachmentRef(attachment, type = '') {
