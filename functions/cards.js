@@ -21,7 +21,7 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, { commandId = -1, isError = false }) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -136,7 +136,7 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     }
 }
 
-async function createcComplaintReportCard(names = { workflow: '', project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
+async function createcComplaintReportCard(names = { workflow: '', project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, { commandId = -1, isFirst = false, isError = false }) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -148,25 +148,10 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         }
     }
 
-    let unfilled = ''
-    const nameMap = {
-        project: '專案',
-        type: '類別',
-        priority: '急迫性',
-        title: '標題',
-        description: '說明'
-    }
-    for (let name in nameMap) {
-        if (!names[name]) {
-            unfilled += `${nameMap[name]}、`
-        }
-    }
-    unfilled = unfilled.slice(0, unfilled.length - 1)
-
     const hint = {
         decoratedText: {
             topLabel: '',
-            text: `所有項目皆為必填！尚未填寫的欄位：${unfilled}`,
+            text: '所有項目皆為必填！',
             startIcon: {
                 knownIcon: 'STAR',
                 altText: 'all fields are required'
@@ -178,6 +163,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'project',
                 items: [
                     {
@@ -191,6 +177,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'type',
                 items: [
                     {
@@ -214,6 +201,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'priority',
                 items: [
                     {
@@ -255,6 +243,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 label: '標題',
                 type: 'SINGLE_LINE',
                 name: 'title',
+                hintText: '',
                 value: names.title
             }
         },
@@ -263,10 +252,25 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 label: '說明',
                 type: 'MULTIPLE_LINE',
                 name: 'description',
+                hintText: '',
                 value: names.description
             }
         }
     ]
+
+    const required = ['project', 'type', 'priority', 'title', 'description']
+    const hintText = '此欄位為必填！'
+    const splitId = 3
+    if (!isFirst) {
+        required.forEach((input, id) => {
+            if (!names[input]) {
+                if (id < splitId) {
+                    return selectionInputs[id].selectionInput.label = hintText
+                }
+                return inputs[id - splitId].textInput.hintText = hintText
+            }
+        })
+    }
 
     const commandIdTag = [
         {

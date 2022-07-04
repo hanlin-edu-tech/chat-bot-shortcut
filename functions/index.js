@@ -48,10 +48,10 @@ exports.convertToShortcut = async (req, res) => {
             commandId = parseInt(message.slashCommand.commandId)
             switch (commandId) {
                 case 1:
-                    body = createBugReportCard({ imageRef }, commandId)
+                    body = createBugReportCard({ imageRef }, { commandId })
                     break
                 case 2:
-                    body = await createcComplaintReportCard({ workflow: COMPLAINT_REPORT_SETTING.workflow, imageRef }, commandId)
+                    body = await createcComplaintReportCard({ workflow: COMPLAINT_REPORT_SETTING.workflow, imageRef }, { commandId, isFirst: true })
                     break
             }
 
@@ -80,7 +80,7 @@ exports.convertToShortcut = async (req, res) => {
             formInputs.workflow = COMPLAINT_REPORT_SETTING.workflow
 
             if (!isValid) {
-                body = await createCard(formInputs, commandId)
+                body = await createCard(formInputs, { commandId })
                 break
             }
 
@@ -107,7 +107,7 @@ exports.convertToShortcut = async (req, res) => {
                 }
 
                 if (res.status !== 201) {
-                    body = await createCard(formInputs, commandId, true)
+                    body = await createCard(formInputs, { commandId, isError: true })
                     break
                 }
 
@@ -128,7 +128,7 @@ exports.convertToShortcut = async (req, res) => {
 
                 // body = createSubmittedCard()
             } catch (err) {
-                body = await createCard(formInputs, commandId, true)
+                body = await createCard(formInputs, { commandId, isError: true })
                 console.log(err)
             }
 
