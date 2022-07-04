@@ -4,6 +4,7 @@ const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
 const { publishStory } = require('./shortcutAPI')
 const { createSubmittedCard, createBugReportCard, createcComplaintReportCard } = require('./cards')
+const { responseCheckHostExist, createNewRoute53HostRecord, deleteRecord} = require('./awsRoute53')
 
 const GCS_BUCKET = 'chat-bot-attachment'
 const GCS_HOST = 'https://storage.googleapis.com/chat-bot-attachment'
@@ -25,6 +26,18 @@ const COMPLAINT_REPORT_SETTING = {
     state: '客訴區',
     project: '',
     priority: ''
+}
+
+
+exports.controllRoute53 = function (req, res) {
+    if (req.method === 'GET' || !req.body.message) {
+        return res.status(403).json({
+            status: 'error',
+            message: 'illegal request'
+        })
+    }
+
+
 }
 
 exports.convertToShortcut = async (req, res) => {
