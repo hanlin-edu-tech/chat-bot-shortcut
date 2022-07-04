@@ -237,6 +237,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         })        
     })
 
+    const defaultContent = '**提問者**:\n\n**問題**:\n\n**建議**:'
     const inputs = [
         {
             textInput: {
@@ -253,7 +254,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 type: 'MULTIPLE_LINE',
                 name: 'description',
                 hintText: '',
-                value: names.description ? names.description : '**提問者**:\n\n**問題**:\n\n**建議**:'
+                value: names.description ? names.description : defaultContent
             }
         }
     ]
@@ -263,6 +264,9 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
     const splitId = 3
     if (!isFirst) {
         required.forEach((input, id) => {
+            if (input === 'description' && names.description.replace(/\s/g, '') === defaultContent.replace(/\s/g, '')) {
+                return inputs[id - splitId].textInput.hintText = hintText
+            }
             if (!names[input]) {
                 if (id < splitId) {
                     return selectionInputs[id].selectionInput.label = hintText
