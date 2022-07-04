@@ -21,7 +21,7 @@ function createSubmittedCard() {
     }
 }
 
-function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
+function createBugReportCard(names = { title: '', product: '', category: '', description: '', imageRef: '' }, { commandId = -1, isError = false }) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -136,7 +136,7 @@ function createBugReportCard(names = { title: '', product: '', category: '', des
     }
 }
 
-async function createcComplaintReportCard(names = { workflow: '', project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, commandId = -1, isError = false) {
+async function createcComplaintReportCard(names = { workflow: '', project: '', type: '', priority: '', title: '', description: '', imageRef: '' }, { commandId = -1, isFirst = false, isError = false }) {
     const error = {
         decoratedText: {
             topLabel: '',
@@ -163,6 +163,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'project',
                 items: [
                     {
@@ -176,6 +177,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'type',
                 items: [
                     {
@@ -199,6 +201,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
+                label: '',
                 name: 'priority',
                 items: [
                     {
@@ -234,12 +237,14 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         })        
     })
 
+    const defaultContent = '**提問者**:\n\n**問題**:\n\n**建議**:'
     const inputs = [
         {
             textInput: {
                 label: '標題',
                 type: 'SINGLE_LINE',
                 name: 'title',
+                hintText: '',
                 value: names.title
             }
         },
@@ -248,10 +253,28 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 label: '說明',
                 type: 'MULTIPLE_LINE',
                 name: 'description',
-                value: names.description
+                hintText: '',
+                value: names.description ? names.description : defaultContent
             }
         }
     ]
+
+    const required = ['project', 'type', 'priority', 'title', 'description']
+    const hintText = '此欄位為必填！'
+    const splitId = 3
+    if (!isFirst) {
+        required.forEach((input, id) => {
+            if (input === 'description' && names.description.replace(/\s/g, '') === defaultContent.replace(/\s/g, '')) {
+                return inputs[id - splitId].textInput.hintText = hintText
+            }
+            if (!names[input]) {
+                if (id < splitId) {
+                    return selectionInputs[id].selectionInput.label = hintText
+                }
+                return inputs[id - splitId].textInput.hintText = hintText
+            }
+        })
+    }
 
     const commandIdTag = [
         {
