@@ -253,7 +253,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 type: 'MULTIPLE_LINE',
                 name: 'description',
                 hintText: '',
-                value: names.description
+                value: names.description ? names.description : '**提問者**:\n\n**問題**:\n\n**建議**:'
             }
         }
     ]
