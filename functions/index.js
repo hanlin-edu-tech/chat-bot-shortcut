@@ -149,12 +149,16 @@ exports.convertToShortcut = async (req, res) => {
     }
 
     if (Object.keys(body).length) {
-        return res.status(200).send(JSON.stringify(data))    
+        return res.status(200).json(JSON.stringify(data))    
     }
-    res.status(200).json({
-        status: 'sucess',
-        message: 'report submmited'
-    })
+    res.status(200).json(JSON.stringify({
+        action_response: {
+            dialog_action: {
+                action_status: 'OK'
+            },
+            type: 'DIALOG'
+        }
+    }))
 }
 
 function getAttachmentRef(attachment, type = '') {
