@@ -237,7 +237,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         })        
     })
 
-    const defaultContent = '**提問者**:\n\n**問題**:\n\n**建議**:'
+    const defaultContent = '**提問者**\n\n**問題**\n\n**建議**'
     const inputs = [
         {
             textInput: {
@@ -260,7 +260,7 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
     ]
 
     const required = ['project', 'type', 'priority', 'title', 'description']
-    const hintText = '此欄位為必填！'
+    const hintText = '此欄位為必填'
     const splitId = 3
     if (!isFirst) {
         required.forEach((input, id) => {
@@ -269,7 +269,8 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
             }
             if (!names[input]) {
                 if (id < splitId) {
-                    return selectionInputs[id].selectionInput.label = hintText
+                    const inputName = selectionInputs[id].selectionInput.items[0].text
+                    return selectionInputs[id].selectionInput.label = `${inputName} (${hintText})`
                 }
                 return inputs[id - splitId].textInput.hintText = hintText
             }
