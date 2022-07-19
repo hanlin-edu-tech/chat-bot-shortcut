@@ -172,5 +172,17 @@ async function getProjects(workflowName = '') {
     return projectItems
 }
 
+async function isMemberExist(email) {
+    const members = await getMembers()
+
+    for (let member of members) {
+        if (member.profile.email_address === email) {
+            return true
+        }
+    }
+    return false
+}
+
 module.exports.publishStory = publishStory
 module.exports.getProjects = getProjects
+module.exports.isMemberExist = isMemberExist

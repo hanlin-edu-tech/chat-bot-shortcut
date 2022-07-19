@@ -148,22 +148,34 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         }
     }
 
-    const hint = {
-        decoratedText: {
-            topLabel: '',
-            text: '所有項目皆為必填！',
-            startIcon: {
-                knownIcon: 'STAR',
-                altText: 'all fields are required'
+    const hint = [
+        {
+            decoratedText: {
+                topLabel: '',
+                text: '所有項目皆為必填！',
+                startIcon: {
+                    knownIcon: 'STAR',
+                    altText: 'all fields are required'
+                }
             }
-        }
-    }
+        },
+        {
+            decoratedText: {
+                topLabel: '',
+                text: '如要上傳圖片，請在輸入 /report 的文字筐內拖拉放入圖片再輸入指令。圖片限一張，如要上傳多張圖片，建議可以將圖片整理成一大張圖或是在說明處放入 Google Drive 連結。',
+                startIcon: {
+                    knownIcon: 'STAR',
+                    altText: 'image uploading hint'
+                },
+                wrapText: true
+            }
+        },
+    ]
 
     const selectionInputs = [
         {
             selectionInput: {
                 type: 'DROPDOWN',
-                label: '',
                 name: 'project',
                 items: [
                     {
@@ -177,7 +189,6 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
-                label: '',
                 name: 'type',
                 items: [
                     {
@@ -201,7 +212,6 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
         {
             selectionInput: {
                 type: 'DROPDOWN',
-                label: '',
                 name: 'priority',
                 items: [
                     {
@@ -244,7 +254,6 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 label: '標題',
                 type: 'SINGLE_LINE',
                 name: 'title',
-                hintText: '',
                 value: names.title
             }
         },
@@ -253,26 +262,24 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                 label: '說明',
                 type: 'MULTIPLE_LINE',
                 name: 'description',
-                hintText: '',
                 value: names.description ? names.description : defaultContent
             }
         }
     ]
 
     const required = ['project', 'type', 'priority', 'title', 'description']
-    const hintText = '此欄位為必填'
+    const hintText = '⚠️ 此欄位為必填 ⚠️'
     const splitId = 3
     if (!isFirst) {
         required.forEach((input, id) => {
             if (input === 'description' && names.description.replace(/\s/g, '') === defaultContent.replace(/\s/g, '')) {
-                return inputs[id - splitId].textInput.hintText = hintText
+                return inputs[id - splitId].textInput.label += ` ${hintText}`
             }
             if (!names[input]) {
                 if (id < splitId) {
-                    const inputName = selectionInputs[id].selectionInput.items[0].text
-                    return selectionInputs[id].selectionInput.label = `${inputName} (${hintText})`
+                    return selectionInputs[id].selectionInput.items[0].text += ` ${hintText}`
                 }
-                return inputs[id - splitId].textInput.hintText = hintText
+                return inputs[id - splitId].textInput.label += ` ${hintText}`
             }
         })
     }
@@ -292,9 +299,9 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
 
     const widgetsSelectionInputs = []
     if (isError) {
-        widgetsSelectionInputs.push(error, hint, ...selectionInputs)
+        widgetsSelectionInputs.push(error, ...hint, ...selectionInputs)
     } else {
-        widgetsSelectionInputs.push(hint, ...selectionInputs)
+        widgetsSelectionInputs.push(...hint, ...selectionInputs)
     }
 
     const widgetsImg = []
