@@ -2,7 +2,7 @@ const { google } = require('googleapis')
 const chat = google.chat('v1')
 const { Storage } = require('@google-cloud/storage')
 const { v4: uuidv4 } = require('uuid')
-const { publishStory } = require('./shortcutAPI')
+const { publishStory, isMemberExist } = require('./shortcutAPI')
 const { createSubmittedCard, createBugReportCard, createcComplaintReportCard } = require('./cards')
 
 const GCS_BUCKET = 'chat-bot-attachment'
@@ -37,11 +37,18 @@ exports.convertToShortcut = async (req, res) => {
 
     const dialogEventType = req.body.dialogEventType ? req.body.dialogEventType : ''
     const message = req.body.message
+    const { space } = message
+    const senderEmail = message.sender.email
     let body = {}
     let commandId
 
     switch (dialogEventType) {
         case 'REQUEST_DIALOG':
+            if (!(await isMemberExist(senderEmail))) {
+                await sendMessageToSpace('開卡前請先向主管申請 Shortcut 帳號。', space.name)
+                break
+            }
+
             const attachment = message.attachment ? message.attachment : []
             const imageRef = getAttachmentRef(attachment, 'image')
 
@@ -87,7 +94,6 @@ exports.convertToShortcut = async (req, res) => {
             try {
                 const { title, product, category, project, type, priority, imageRef } = formInputs
                 const description = await addImageIntoDescription(formInputs.description, imageRef)
-                const senderEmail = message.sender.email
                 let res
 
                 switch (commandId) {
@@ -97,7 +103,7 @@ exports.convertToShortcut = async (req, res) => {
                         break
                     case 2:
                         const temp = project.split(':')
-                        COMPLAINT_REPORT_SETTING.owners.push(temp[1])
+                        COMPLAINT_REPORT_SETTING.owners = [temp[1]]
                         COMPLAINT_REPORT_SETTING.storyType = type
                         COMPLAINT_REPORT_SETTING.project = temp[0]
                         COMPLAINT_REPORT_SETTING.priority = priority
@@ -111,7 +117,6 @@ exports.convertToShortcut = async (req, res) => {
                     break
                 }
 
-                const { space } = message
                 const storyUrl = (await res.json()).app_url
                 // const storyUrl = ''
                 let messageContent = ''
