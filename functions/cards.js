@@ -1,6 +1,6 @@
 const { getProjects } = require('./shortcutAPI')
 
-function createSubmittedCard() {
+function createSubmittedCard(text) {
     return {
         sections: [
             {
@@ -8,7 +8,7 @@ function createSubmittedCard() {
                     {
                         decoratedText: {
                             topLabel: '',
-                            text: '送出成功！',
+                            text,
                             startIcon: {
                                 knownIcon: 'STAR',
                                 altText: 'report submitted'

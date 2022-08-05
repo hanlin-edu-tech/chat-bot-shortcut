@@ -129,9 +129,13 @@ exports.convertToShortcut = async (req, res) => {
                         messageContent = `已完成開卡\n\n*標題:* ${title}\n*Story連結:* ${storyUrl}\n\n卡片進度將會通過E-mail通知，請留意信件。`
                         break
                 }
-                await sendMessageToSpace(messageContent, space.name)
 
-                // body = createSubmittedCard()
+                try {
+                    await sendMessageToSpace(messageContent, space.name)
+                } catch (err) {
+                    console.log(err)
+                    body = createSubmittedCard(messageContent)
+                }
             } catch (err) {
                 body = await createCard(formInputs, { commandId, isError: true })
                 console.log(err)
@@ -181,20 +185,25 @@ async function addImageIntoDescription(description, imageRef = '') {
     const temp = imageRef.split(':')
     const imageType = temp[0].split('/')[1]
     const imageResourceName = temp[1]
-    
-    const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] })
-    const authClient = await auth.getClient()
-    google.options({ auth: authClient })
 
-    const res = await chat.media.download({ resourceName: `${imageResourceName}?alt=media` }, { responseType: 'arraybuffer' })
-    
-    const imageBuffer = Buffer.from(res.data)
-    const destFileName = `${uuidv4()}.${imageType}`
-    const storage = new Storage()
+    try {
+        const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] })
+        const authClient = await auth.getClient()
+        google.options({ auth: authClient })
 
-    await storage.bucket(GCS_BUCKET).file(destFileName).save(imageBuffer)
+        const res = await chat.media.download({ resourceName: `${imageResourceName}?alt=media` }, { responseType: 'arraybuffer' })
+        
+        const imageBuffer = Buffer.from(res.data)
+        const destFileName = `${uuidv4()}.${imageType}`
+        const storage = new Storage()
 
-    return description += `\n![${destFileName}](${GCS_HOST}/${destFileName})`
+        await storage.bucket(GCS_BUCKET).file(destFileName).save(imageBuffer)
+
+        return description += `\n![${destFileName}](${GCS_HOST}/${destFileName})`
+    } catch (err) {
+        console.log(err)
+        return description
+    }
 }
 
 async function sendMessageToSpace(message, space) {
