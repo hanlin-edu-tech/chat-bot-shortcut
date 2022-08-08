@@ -1,7 +1,7 @@
 const fetch = require('node-fetch')
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
-const emailRegex = /[\w\-.]*@ehanlin\.com\.tw/
+const emailRegex = /[\w\-.]*@\w*\.com\.tw/
 
 async function publishStory(name, description, requesterMail = '', setting) {
     const members = await getMembers()
