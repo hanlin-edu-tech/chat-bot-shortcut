@@ -65,6 +65,7 @@ exports.convertToShortcut = async (req, res) => {
             break
         case 'SUBMIT_DIALOG':
             const formInputs = req.body.common.formInputs
+            const invokedFunction = (req.body.common && req.body.common.invokedFunction) ? req.body.common.invokedFunction : 'SUBMIT'
             let isValid = true
             let createCard
 
@@ -80,11 +81,21 @@ exports.convertToShortcut = async (req, res) => {
 
             for (let key in formInputs) {
                 formInputs[key] = formInputs[key].stringInputs.value[0]
+            }
+            formInputs.workflow = COMPLAINT_REPORT_SETTING.workflow
+
+            // 若是搜尋專案（REFRESH），僅重繪卡片，不做驗證
+            if (invokedFunction !== 'SUBMIT') {
+                body = await createcComplaintReportCard(formInputs, { commandId, isFirst: true })
+                break
+            }
+
+            // 送出時才驗證必填
+            for (let key in formInputs) {
                 if (!formInputs[key]) {
                     isValid = false
                 }
             }
-            formInputs.workflow = COMPLAINT_REPORT_SETTING.workflow
 
             if (!isValid) {
                 body = await createCard(formInputs, { commandId })

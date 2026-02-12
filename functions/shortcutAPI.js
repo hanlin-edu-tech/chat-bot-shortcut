@@ -139,37 +139,62 @@ async function getCustomField(fieldName = '') {
     }
 }
 
-async function getProjects(workflowName = '') {
-    const resWorkflow = await fetch('https://api.app.shortcut.com/api/v3/workflows', {
-        method: 'GET',
-        headers: {
-            'content-type': 'application/json',
-            'shortcut-token': process.env.SHORTCUT_API_TOKEN
-        }
-    })
-    const workflows = await resWorkflow.json()
-    const workflowId = workflows.filter(workflow => workflow.name === workflowName)[0].id
+async function getProjects(workflowName = '', keyword = '') {
+    try {
+        const resWorkflow = await fetch('https://api.app.shortcut.com/api/v3/workflows', {
+            method: 'GET',
+            headers: {
+                'content-type': 'application/json',
+                'shortcut-token': process.env.SHORTCUT_API_TOKEN
+            }
+        })
+        const workflows = await resWorkflow.json()
 
-    const res = await fetch('https://api.app.shortcut.com/api/v3/projects', {
-        method: 'GET',
-        headers: {
-            'content-type': 'application/json',
-            'shortcut-token': process.env.SHORTCUT_API_TOKEN
-        }
-    })
-    const projects = (await res.json()).filter(project => project.workflow_id === workflowId)
-    const projectItems = projects.map(project => {
-        let owner = project.description.match(emailRegex) || []
-        owner = owner.length ? owner[0] : ''
+        const workflow = Array.isArray(workflows)
+            ? workflows.find(w => w && w.name === workflowName)
+            : null
 
-        return {
-            text: project.name,
-            value: `${project.id}:${owner}`,
-            selected: false
+        if (!workflow || !workflow.id) {
+            return []
         }
-    })
 
-    return projectItems
+        const res = await fetch('https://api.app.shortcut.com/api/v3/projects', {
+            method: 'GET',
+            headers: {
+                'content-type': 'application/json',
+                'shortcut-token': process.env.SHORTCUT_API_TOKEN
+            }
+        })
+        const allProjects = await res.json()
+        const projects = (Array.isArray(allProjects) ? allProjects : [])
+            .filter(project => project && project.workflow_id === workflow.id)
+            .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
+
+        // 關鍵字過濾（比對名稱，包含即可）
+        const filtered = keyword
+            ? projects.filter(p => String(p.name || '').toLowerCase().includes(String(keyword).toLowerCase()))
+            : projects
+
+        // 限制下拉項目數量，避免超過 Chat 對話框限制
+        const LIMIT = 10
+        const count = filtered.length
+        const limited = filtered.slice(0, LIMIT)
+        const projectItems = limited.map(project => {
+            const desc = (project && project.description) ? project.description : ''
+            let owner = desc ? (desc.match(emailRegex) || []) : []
+            owner = owner.length ? owner[0] : ''
+
+            return {
+                text: String(project.name).slice(0, 80),
+                value: `${project.id}:${owner}`,
+                selected: false
+            }
+        })
+
+        return { items: projectItems, hasMore: count > LIMIT, count }
+    } catch (err) {
+        return { items: [], hasMore: false, count: 0 }
+    }
 }
 
 async function isMemberExist(email) {

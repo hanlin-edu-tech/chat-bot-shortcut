@@ -199,12 +199,12 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                     {
                         text: '系統問題',
                         value: 'bug',
-                        selected: true
+                        selected: false
                     },
                     {
                         text: '功能建議',
                         value: 'feature',
-                        selected: true
+                        selected: false
                     }
                 ]
             }
@@ -238,12 +238,14 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
             }
         }
     ]
-    const projects = await getProjects(names.workflow)
+    const { items: projects, hasMore, count } = await getProjects(names.workflow, names.projectKeyword || '')
     selectionInputs[0].selectionInput.items.push(...projects)
 
     selectionInputs.forEach(input => {
+        const key = input.selectionInput.name
+        const desired = (names[key] ?? '')
         input.selectionInput.items.forEach(item => {
-            item.selected = item.value === names[input.selectionInput.name] ? true : false
+            item.selected = (item.value === desired)
         })        
     })
 
@@ -297,11 +299,33 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
 
     const sections = []
 
+    // 搜尋框放在專案下拉上方
+    const searchInput = {
+        textInput: {
+            label: '搜尋專案（輸入關鍵字後按下方「搜尋專案」）',
+            type: 'SINGLE_LINE',
+            name: 'projectKeyword',
+            value: names.projectKeyword || ''
+        }
+    }
+
+    const countText = hasMore
+        ? `符合 ${count} 筆，因系統限制僅顯示前 10 筆，請輸入更精確的關鍵字。`
+        : `符合 ${count} 筆。`
+    const moreHint = [{
+        decoratedText: {
+            topLabel: '',
+            text: countText,
+            startIcon: { knownIcon: 'STAR', altText: 'results info' },
+            wrapText: true
+        }
+    }]
+
     const widgetsSelectionInputs = []
     if (isError) {
-        widgetsSelectionInputs.push(error, ...hint, ...selectionInputs)
+        widgetsSelectionInputs.push(error, ...hint, searchInput, ...moreHint, ...selectionInputs)
     } else {
-        widgetsSelectionInputs.push(...hint, ...selectionInputs)
+        widgetsSelectionInputs.push(...hint, searchInput, ...moreHint, ...selectionInputs)
     }
 
     const widgetsImg = []
@@ -336,6 +360,15 @@ async function createcComplaintReportCard(names = { workflow: '', project: '', t
                     blue: 0.859,
                     alpha: 1
                 }
+            },
+            secondaryButton: {
+                text: '搜尋專案',
+                onClick: {
+                    action: {
+                        function: 'REFRESH'
+                    }
+                },
+                altText: 'refresh'
             }
         }
     }
